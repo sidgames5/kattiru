@@ -18,15 +18,32 @@ func main() {
 	r := mux.NewRouter()
 	server := &http.Server{
 		Addr:    ":8080",
-		Handler: r,
+		Handler: middleware(r),
 	}
 	r.HandleFunc("/queue", queue.HandleDequeue).Methods(http.MethodGet)
 	r.HandleFunc("/queue", queue.HandleEnqueue).Methods(http.MethodPost)
-	go (func() {
-		log.Println("Starting server...")
-		err := server.ListenAndServe()
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
-		}
-	})()
+
+	log.Println("Starting server...")
+	err := server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
+}
+
+func middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wrappedWriter := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(wrappedWriter, r)
+		log.Printf("%s %s %d", r.Method, r.URL.Path, wrappedWriter.statusCode)
+	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
 }
